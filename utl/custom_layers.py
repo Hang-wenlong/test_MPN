@@ -166,12 +166,12 @@ class Last_Sigmoid(Layer):
         x = K.dot(x, self.kernel)
         if self.use_bias:
             x = K.bias_add(x, self.bias)
+        x = K.mean(x, axis=0, keepdims=True)
+        # # sigmoid
+        # out = K.sigmoid(x)
 
-        # sigmoid
-        out = K.sigmoid(x)
 
-
-        return out
+        return x
 
     def compute_output_shape(self, input_shape):
         shape = list(input_shape)

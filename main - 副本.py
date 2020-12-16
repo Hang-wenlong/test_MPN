@@ -10,7 +10,7 @@ https://128.84.21.199/pdf/1802.04712.pdf
 
 import numpy as np
 import time
-from utl import model, Cell_Net
+from utl import Cell_Net
 from random import shuffle
 import argparse
 from keras.models import Model
@@ -54,7 +54,47 @@ import os
 # image_data_set= tiles_splidate(Train_frame, data_trans)  ####train的路径
                                         
 #############数据，tile的标签，sample_id
+def generate_batch(path):
+    bags = []
+    for each_path in path:
+        each_path = each_path.replace('\\','/') ## 替换为D:\\图片\\Zbtv1.jpg
+        name_img = []
+        img = []
+        img_path = glob.glob(each_path + '/*.png') ##取出每bag的所有实例
+        num_ins = len(img_path)
+        # print(num_ins)
+        # print(each_path)
 
+        label = int(each_path.split('/')[-2]) ##取出每个bag的标签
+
+        if label == 0:
+            curr_label = np.zeros(num_ins, dtype=np.uint8) ##若bag为0，每个实例都是0
+            
+        elif label == 1:
+            curr_label = np.ones(num_ins,dtype=np.uint8)  ##若bag为1，每个实例都是1
+            
+        elif label == 2:
+            curr_label = 2 * np.ones(num_ins,dtype=np.uint8)  ##若bag为1，每个实例都是1
+            
+        elif label == 3:
+            curr_label = 3 * np.ones(num_ins,dtype=np.uint8)  ##若bag为1，每个实例都是1
+            
+        for each_img in img_path:
+            each_img = each_img.replace('\\','/') ## 替换为D:\\图片\\Zbtv1.jpg
+            img_data = np.asarray(imageio.imread(each_img), dtype=np.float32)
+            ##### 对每个实例进行归一化
+            #img_data -= 255
+            img_data[:, :, 0] -= 123.68
+            img_data[:, :, 1] -= 116.779
+            img_data[:, :, 2] -= 103.939
+            img_data /= 255
+            # sci.imshow(img_data)
+            img.append(np.expand_dims(img_data,0))##第一维度加1
+            name_img.append(each_img.split('/')[-1])  ##每个实例的名字
+        stack_img = np.concatenate(img, axis=0)  ##所有实例封装一个300，256，256，3
+        bags.append((stack_img, curr_label, name_img)) ##一个包的所有东西
+
+    return bags
 def parse_args():
     """Parse input arguments.
     Parameters
@@ -90,46 +130,6 @@ def parse_args():
 
     args = parser.parse_args()
     return args
-
-def generate_batch(path):
-    bags = []
-    for each_path in path:
-        each_path = each_path.replace('\\','/') ## 替换为D:\\图片\\Zbtv1.jpg
-        name_img = []
-        img = []
-        img_path = glob.glob(each_path + '/*.png') ##取出每bag的所有实例
-        num_ins = len(img_path)
-
-        label = int(each_path.split('/')[-2]) ##取出每个bag的标签
-
-        if label == 0:
-            curr_label = np.zeros(num_ins, dtype=np.uint8) ##若bag为0，每个实例都是0
-            
-        elif label == 1:
-            curr_label = np.ones(num_ins,dtype=np.uint8)  ##若bag为1，每个实例都是1
-            
-        elif label == 2:
-            curr_label = 2 * np.ones(num_ins,dtype=np.uint8)  ##若bag为1，每个实例都是1
-            
-        elif label == 3:
-            curr_label = 3 * np.ones(num_ins,dtype=np.uint8)  ##若bag为1，每个实例都是1
-            
-        for each_img in img_path:
-            each_img = each_img.replace('\\','/') ## 替换为D:\\图片\\Zbtv1.jpg
-            img_data = np.asarray(imageio.imread(each_img), dtype=np.float32)
-            ##### 对每个实例进行归一化
-            #img_data -= 255
-            img_data[:, :, 0] -= 123.68
-            img_data[:, :, 1] -= 116.779
-            img_data[:, :, 2] -= 103.939
-            img_data /= 255
-            # sci.imshow(img_data)
-            img.append(np.expand_dims(img_data,0))##第一维度加1
-            name_img.append(each_img.split('/')[-1])  ##每个实例的名字
-        stack_img = np.concatenate(img, axis=0)  ##所有实例封装一个300，256，256，3
-        bags.append((stack_img, curr_label, name_img)) ##一个包的所有东西
-
-    return bags
 
 
 def Get_train_valid_Path(Train_set, train_percentage=0.8):
@@ -167,6 +167,7 @@ def test_eval(model, test_set):
     test_acc : float
         Mean accuracy of evaluating on testing set.
     """
+    test_set = generate_batch(test_set)
     num_test_batch = len(test_set)
     test_loss = np.zeros((num_test_batch, 1), dtype=float)
     test_acc = np.zeros((num_test_batch, 1), dtype=float)
@@ -221,7 +222,7 @@ def test_print_attention(model, test_set):
 
     # Then you can draw the image by multiply ak_x and ak_output 
     # or draw the n_largest rectangle(ROIs) on the origin image
-def train_eval(model, train_set, irun, ifold):
+def train_eval(model, train_bags, irun, ifold):
     """Evaluate on training set. Use Keras fit_generator
     Parameters
     -----------------
@@ -234,11 +235,11 @@ def train_eval(model, train_set, irun, ifold):
     model_name: saved lowest val_loss model's name
     """
     batch_size = 1
-    model_train_set, model_val_set = Get_train_valid_Path(train_set, train_percentage=0.9) ##训练集89又一次分为80个训练，9个验证
+    model_train_bags, model_val_bags = Get_train_valid_Path(train_bags, train_percentage=0.3) ##训练集89又一次分为80个训练，9个验证
 
     from utl.DataGenerator import DataGenerator
-    train_gen = DataGenerator(batch_size=1, shuffle=True).generate(model_train_set)
-    val_gen = DataGenerator(batch_size=1, shuffle=False).generate(model_val_set)
+    train_gen = DataGenerator(batch_size=1, shuffle=True).generate(model_train_bags)
+    val_gen = DataGenerator(batch_size=1, shuffle=False).generate(model_val_bags)
 
     model_name = "Saved_model/" + "_Batch_size_" + str(batch_size) + "epoch_" + "best.hd5"
 
@@ -250,9 +251,9 @@ def train_eval(model, train_set, irun, ifold):
 
     callbacks = [checkpoint_fixed_name, EarlyStop]
 
-    history = model.fit_generator(generator=train_gen, steps_per_epoch=len(model_train_set)//batch_size,
+    history = model.fit_generator(generator=train_gen, steps_per_epoch=len(model_train_bags)//batch_size,
                                              epochs=args.max_epoch, validation_data=val_gen,
-                                            validation_steps=len(model_val_set)//batch_size, callbacks=callbacks)
+                                            validation_steps=len(model_val_bags)//batch_size, callbacks=callbacks)
 
     train_loss = history.history['loss']
     val_loss = history.history['val_loss']
@@ -292,9 +293,9 @@ def model_training(input_dim, dataset, irun, ifold):
     train_bags = dataset['train']
     test_bags = dataset['test']
 
-    # convert bag to batch
-    train_set = generate_batch(train_bags)
-    test_set = generate_batch(test_bags)
+    # # convert bag to batch
+    # train_set = generate_batch(train_bags)
+    # test_set = generate_batch(test_bags)
 
     model = Cell_Net.cell_net(input_dim, args, useMulGpu=False)
     # train model
@@ -302,14 +303,14 @@ def model_training(input_dim, dataset, irun, ifold):
         
     # num_batch = len(train_set)
     # for epoch in range(args.max_epoch):
-    model_name = train_eval(model, train_set, irun, ifold) ##训练模型，采用10折交叉验证进行训练，训练89个包被分为90%训练，10%验证，并采取早停
+    model_name = train_eval(model, train_bags, irun, ifold) ##训练模型，采用10折交叉验证进行训练，训练89个包被分为90%训练，10%验证，并采取早停
 
     print("load saved model weights")
     model.load_weights(model_name)  ##加载训练好的模型
 
-    test_loss, test_acc = test_eval(model, test_set)
+    test_loss, test_acc = test_eval(model, test_bags)
     ## print attention weight  
-    test_print_attention(model, test_set)
+    # test_print_attention(model, test_set)
     
     t2 = time.time()
     #
