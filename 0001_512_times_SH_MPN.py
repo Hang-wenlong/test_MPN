@@ -233,21 +233,21 @@ Valid_frame = Valid_frame.loc[:,['File_addr', 'GT_tiles_level', 'Sample_id']]
             
 
 data_trans = { 'train':transforms.Compose([
-                transforms.Resize(1024),
+                # transforms.Resize(1024),
                 transforms.CenterCrop(224),
                 transforms.ToTensor(),
                 transforms.Normalize([0.7471,0.6316,0.7629], 
                                      [0.2271,0.2782,0.1806])
             ]),
                 'test':transforms.Compose([
-                transforms.Resize(1024),
+                # transforms.Resize(1024),
                 transforms.CenterCrop(224),
                 transforms.ToTensor(),
                 transforms.Normalize([0.7471,0.6316,0.7629], 
                                      [0.2271,0.2782,0.1806])
             ]),
                'valid':transforms.Compose([
-                transforms.Resize(1024),
+                # transforms.Resize(1024),
                 transforms.CenterCrop(224),
                 transforms.ToTensor(),
                 transforms.Normalize([0.7471,0.6316,0.7629], 
